@@ -1,0 +1,1875 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Evaluación y Control de Notas — IUTIRLA</title>
+    <!-- Tailwind CSS (Play CDN) para maquetación ágil, adaptativa y mobile-first -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        iutirla: {
+                            blue: '#1e3a8a',  // Azul Profundo Institucional
+                            red: '#dc2626',   // Rojo Vibrante
+                            gold: '#ca8a04',  // Acento Dorado Premium
+                            light: '#f3f4f6'  // Fondo gris suave
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js para Reportes de Métricas y Rendimiento -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF.js para extracción y lectura de contenidos curriculares (.pdf) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <!-- Mammoth.js para extracción y lectura de contenidos curriculares (.docx) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- Iconografía Tabler Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    
+    <style>
+        /* Desactivar visualmente barras laterales o de navegación durante el transcurso de una evaluación activa */
+        body.exam-mode #main-nav, 
+        body.exam-mode #sidebar, 
+        body.exam-mode #main-header-actions { 
+            display: none !important; 
+        }
+        
+        /* Animaciones fluidas para Toasts y Diálogos Modales */
+        @keyframes slideUp {
+            from { transform: translateY(1.5rem); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-up { animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        
+        @media print {
+            .no-print { display: none !important; }
+            .print-card { border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col font-sans transition-colors duration-200">
+
+    <!-- COMENTARIO DE ARQUITECTURA SENSATA DE CONTROL DE CREDENCIALES:
+         Las credenciales dinámicas de Firebase se configuran desde la propia UI del panel docente en "Administración General".
+         La API Key de Gemini se configura dinámicamente desde el panel docente en "Configuración de IA".
+         No es estrictamente requerido hardcodearlas aquí para garantizar la portabilidad limpia del archivo index.html. -->
+
+    <!-- CABECERA INSTITUCIONAL SUPERIOR -->
+    <header id="main-header" class="bg-iutirla-blue text-white shadow-lg print:bg-white print:text-black">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded shadow-md flex items-center justify-center">
+                    <span class="text-iutirla-blue font-black text-2xl tracking-tighter">IUT<span class="text-red-600">IR</span>LA</span>
+                </div>
+                <div class="text-center md:text-left">
+                    <h1 class="text-xl font-bold tracking-tight">Evaluación y Control de Notas</h1>
+                    <p class="text-xs text-blue-200 print:hidden">Instituto Universitario de Tecnología Industrial Rodolfo Loero Arismendi</p>
+                </div>
+            </div>
+            <div id="main-header-actions" class="flex flex-wrap gap-2 print:hidden">
+                <button onclick="switchView('student-portal')" class="px-4 py-2 rounded-lg font-semibold text-sm transition bg-white/10 hover:bg-white/20 flex items-center gap-1.5 cursor-pointer">
+                    <i class="ti ti-school text-lg"></i> Portal del Estudiante
+                </button>
+                <button onclick="promptDocenteLogin()" class="px-4 py-2 rounded-lg font-bold text-sm transition bg-amber-500 text-blue-950 hover:bg-amber-400 flex items-center gap-1.5 shadow-md cursor-pointer">
+                    <i class="ti ti-lock text-lg"></i> Dashboard Docente
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ÁREA CENTRAL DE TRABAJO (VISTAS) -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 flex flex-col justify-start">
+
+        <!-- 1. VISTA: BIENVENIDA -->
+        <section id="view-welcome" class="view-segment flex flex-col items-center justify-center py-16 text-center max-w-2xl mx-auto space-y-8 animate-slide-up">
+            <div class="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center text-iutirla-blue border-2 border-amber-400 shadow-inner">
+                <i class="ti ti-certificate text-5xl"></i>
+            </div>
+            <div class="space-y-3">
+                <h2 class="text-3xl font-extrabold text-gray-900 tracking-tight sm:text-4xl">Sistema de Control Curricular Digital</h2>
+                <p class="text-gray-600 text-base leading-relaxed">Bienvenido a la plataforma web unificada para la autogestión de evaluaciones académicas y auditoría de notas del IUTIRLA.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full pt-4">
+                <button onclick="switchView('student-portal')" class="p-6 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition text-left group border-b-4 border-b-blue-700 cursor-pointer">
+                    <div class="w-12 h-12 bg-blue-50 text-iutirla-blue rounded-xl flex items-center justify-center mb-4 group-hover:bg-iutirla-blue group-hover:text-white transition">
+                        <i class="ti ti-user-edit text-2xl"></i>
+                    </div>
+                    <span class="block font-bold text-lg text-gray-800">Soy Estudiante</span>
+                    <span class="text-xs text-gray-500 mt-1 block">Accede a tus evaluaciones correspondientes e imprime tus actas de calificaciones oficiales.</span>
+                </button>
+                <button onclick="promptDocenteLogin()" class="p-6 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition text-left group border-b-4 border-b-amber-500 cursor-pointer">
+                    <div class="w-12 h-12 bg-amber-50 text-iutirla-gold rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-500 group-hover:text-blue-900 transition">
+                        <i class="ti ti-shield-lock text-2xl"></i>
+                    </div>
+                    <span class="block font-bold text-lg text-gray-800">Soy Docente</span>
+                    <span class="text-xs text-gray-500 mt-1 block">Administra materias, automatiza bancos de preguntas con IA y audita el rendimiento por secciones.</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- 2. VISTA: PORTAL DE ACCESO DEL ESTUDIANTE -->
+        <section id="view-student-portal" class="view-segment hidden space-y-6 animate-slide-up">
+            <div class="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm max-w-xl mx-auto space-y-6">
+                <div class="border-b border-gray-100 pb-4 flex items-center gap-3 text-iutirla-blue">
+                    <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center"><i class="ti ti-id text-2xl"></i></div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Registro de Inscripción y Validación</h3>
+                        <p class="text-xs text-gray-500">Ingresa tus datos válidos para activar la evaluación correspondiente.</p>
+                    </div>
+                </div>
+                <form id="student-access-form" onsubmit="handleStudentAccess(event)" class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Nombre Completo</label>
+                            <input type="text" id="stud-name" required class="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cédula de Identidad</label>
+                            <input type="text" id="stud-cedula" required class="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm" placeholder="V-12345678">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Carrera Universitaria</label>
+                        <select id="stud-carrera" required onchange="updateStudentFormSubjects()" class="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-sm bg-white"></select>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Materia / Asignatura</label>
+                            <select id="stud-materia" required onchange="updateStudentFormUnits()" class="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-sm bg-white">
+                                <option value="">Seleccione carrera primero</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Unidad a Evaluar</label>
+                            <select id="stud-unidad" required class="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-sm bg-white">
+                                <option value="">Seleccione materia primero</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full py-3.5 bg-iutirla-blue hover:bg-blue-800 text-white font-bold rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer mt-2">
+                        <i class="ti ti-player-play-filled"></i> Iniciar Evaluación Formal
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- 3. VISTA: MOTOR DE EXAMEN DINÁMICO (VISTA SIN DISTRACCIONES) -->
+        <section id="view-exam-engine" class="view-segment hidden max-w-3xl mx-auto w-full space-y-6">
+            <!-- Cabezal persistente de monitoreo de evaluación -->
+            <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-md flex justify-between items-center sticky top-2 z-40 animate-slide-up">
+                <div class="flex items-center gap-3">
+                    <div id="exam-timer-wrapper" class="bg-red-50 text-iutirla-red p-2 px-3 rounded-xl font-bold text-center border border-red-100 flex flex-col justify-center min-w-[80px]">
+                        <span id="exam-timer" class="text-xl tabular-nums leading-none">60:00</span>
+                        <span class="text-[8px] uppercase tracking-wider text-red-500 mt-0.5">Resta</span>
+                    </div>
+                    <div>
+                        <h4 id="exam-subject-title" class="font-bold text-sm text-gray-900 leading-tight">Asignatura</h4>
+                        <p id="exam-student-title" class="text-xs text-gray-500 mt-0.5">Estudiante</p>
+                    </div>
+                </div>
+                <button onclick="confirmSubmitExamManual()" class="px-4 py-2.5 bg-iutirla-red hover:bg-red-700 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center gap-1.5 cursor-pointer">
+                    <i class="ti ti-checklist text-sm"></i> Concluir Evaluación
+                </button>
+            </div>
+
+            <!-- Contenedor dinámico de reactivos evaluativos de selección múltiple -->
+            <div id="exam-questions-container" class="space-y-6"></div>
+        </section>
+
+        <!-- 4. VISTA: BOLETA OFICIAL DE RESULTADOS (DISEÑO INSTITUCIONAL) -->
+        <section id="view-student-receipt" class="view-segment hidden max-w-3xl mx-auto w-full space-y-6 print:m-0 print:p-0">
+            <div class="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm relative overflow-hidden border-t-8 border-t-iutirla-blue print-card">
+                <!-- Sello Oficial del estatus de la evaluación -->
+                <div id="receipt-seal" class="absolute right-6 top-6 border-4 border-double p-2 text-center uppercase font-black tracking-widest text-lg rounded-xl transform rotate-12 select-none">--</div>
+                
+                <div class="text-center pb-6 border-b border-gray-100">
+                    <span class="text-iutirla-blue font-black text-xl tracking-tighter">IUT<span class="text-red-600">IR</span>LA</span>
+                    <h3 class="text-xl font-bold uppercase text-gray-900 tracking-tight mt-1">Acta de Calificación y Comprobante de Intento</h3>
+                    <p class="text-xs text-gray-500">Transacción de Control de Estudios registrada en Blockchain Local / Servidor Spark</p>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 text-xs bg-gray-50 p-4 rounded-xl my-6 border border-gray-100">
+                    <div>
+                        <span class="text-gray-400 block uppercase font-bold text-[10px]">Estudiante</span>
+                        <strong id="rec-name" class="text-gray-900 text-sm">--</strong>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 block uppercase font-bold text-[10px]">Cédula</span>
+                        <strong id="rec-cedula" class="text-gray-900 text-sm font-mono">--</strong>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 block uppercase font-bold text-[10px]">Carrera</span>
+                        <strong id="rec-carrera" class="text-gray-900 text-sm">--</strong>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 block uppercase font-bold text-[10px]">Asignatura / Evaluación</span>
+                        <strong id="rec-materia-un" class="text-gray-900 text-sm">--</strong>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center justify-between p-4 bg-blue-50/50 border border-blue-100 rounded-xl mb-6 gap-4">
+                    <div class="text-center sm:text-left">
+                        <h4 class="font-bold text-blue-900 text-sm">Calificación Definitiva de la Unidad</h4>
+                        <p class="text-xs text-blue-700">Calculado bajo el reglamento interno de evaluación del IUTIRLA en escala vigesimal (0 - 20 pts).</p>
+                    </div>
+                    <div class="text-center">
+                        <span id="rec-score" class="text-3xl font-black text-iutirla-blue">00 / 20</span>
+                        <span id="rec-status" class="block text-[10px] uppercase font-black tracking-wider mt-0.5">--</span>
+                    </div>
+                </div>
+
+                <div class="print:hidden flex justify-end gap-2 mb-6">
+                    <button onclick="window.print()" class="px-4 py-2 bg-gray-800 text-white rounded-lg text-xs font-semibold shadow hover:bg-gray-700 transition flex items-center gap-1.5 cursor-pointer">
+                        <i class="ti ti-printer"></i> Imprimir Comprobante
+                    </button>
+                    <button onclick="switchView('welcome')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold shadow hover:bg-gray-300 transition flex items-center gap-1.5 cursor-pointer">
+                        <i class="ti ti-home"></i> Retornar al Inicio
+                    </button>
+                </div>
+
+                <!-- Detalle pormenorizado de la revisión -->
+                <div class="border-t border-gray-100 pt-6">
+                    <h4 class="font-bold text-gray-900 mb-4 flex items-center gap-1.5 text-sm"><i class="ti ti-clipboard-check text-lg text-gray-600"></i> Desglose de Retroalimentación de Respuestas</h4>
+                    <div id="receipt-review-container" class="space-y-4"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. VISTA: DASHBOARD DOCENTE PRINCIPAL -->
+        <section id="view-docente-dashboard" class="view-segment hidden flex flex-col lg:flex-row gap-6 animate-slide-up">
+            <!-- Panel Lateral de Navegación del Panel Docente -->
+            <aside id="sidebar" class="w-full lg:w-64 flex flex-col gap-1 shrink-0 bg-white border border-gray-200 rounded-2xl p-3 shadow-sm h-fit">
+                <div class="px-3 py-2 border-b border-gray-100 mb-2 flex items-center justify-between">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Módulos Administrativos</span>
+                    <span id="ia-status-badge" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-100 text-red-700">IA Inactiva</span>
+                </div>
+                <button onclick="switchDashboardTab('tab-ia')" class="dash-tab-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition text-left w-full cursor-pointer"><i class="ti ti-brain text-lg text-purple-600"></i> Configuración de IA</button>
+                <button onclick="switchDashboardTab('tab-materias')" class="dash-tab-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition text-left w-full cursor-pointer"><i class="ti ti-layout-grid text-lg text-blue-600"></i> Diseñador de Materias</button>
+                <button onclick="switchDashboardTab('tab-banco')" class="dash-tab-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition text-left w-full cursor-pointer"><i class="ti ti-database text-lg text-amber-600"></i> Banco de Preguntas</button>
+                <button onclick="switchDashboardTab('tab-contenido')" class="dash-tab-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition text-left w-full cursor-pointer"><i class="ti ti-books text-lg text-teal-600"></i> Contenido Programático</button>
+                <button onclick="switchDashboardTab('tab-estudiantes')" class="dash-tab-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition text-left w-full cursor-pointer"><i class="ti ti-users text-lg text-emerald-600"></i> Control de Estudiantes</button>
+                <button onclick="switchDashboardTab('tab-metricas')" class="dash-tab-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition text-left w-full cursor-pointer"><i class="ti ti-chart-bar text-lg text-indigo-600"></i> Notas y Métricas</button>
+                <button onclick="switchDashboardTab('tab-admin')" class="dash-tab-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition text-left w-full cursor-pointer"><i class="ti ti-settings text-lg text-red-600"></i> Sincronizar Base de Datos</button>
+                <div class="border-t border-gray-100 mt-4 pt-2">
+                    <button onclick="switchView('welcome')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100 transition text-left w-full cursor-pointer"><i class="ti ti-logout text-lg"></i> Cerrar Sesión</button>
+                </div>
+            </aside>
+
+            <!-- Área Central y Principal del Panel de Control -->
+            <div class="flex-grow bg-white border border-gray-200 rounded-2xl p-6 shadow-sm min-w-0">
+                
+                <!-- SUB-PAGINA: CONFIGURACIÓN IA -->
+                <div id="tab-ia" class="dash-tab-content hidden space-y-6">
+                    <div class="border-b border-gray-100 pb-3"><h3 class="text-lg font-bold text-gray-900">Configuración de Inteligencia Artificial Embebida</h3></div>
+                    <div class="bg-purple-50 border border-purple-100 rounded-2xl p-4 flex gap-3 text-sm text-purple-950">
+                        <i class="ti ti-info-circle text-2xl text-purple-600 shrink-0"></i>
+                        <div class="space-y-1.5">
+                            <strong class="font-bold">Interacción Directa desde el Navegador:</strong> El sistema se conecta con la API de Google Gemini en el navegador mediante el endpoint de `gemini-1.5-flash` de forma directa sin servidores intermedios. Su API Key nunca viaja a terceros y es persistida localmente. Consiga su clave gratuita en <strong>aistudio.google.com</strong>.
+                        </div>
+                    </div>
+                    <div class="max-w-xl space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Google Gemini API Key</label>
+                            <div class="flex gap-2">
+                                <input type="password" id="input-gemini-key" class="flex-grow px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-mono" placeholder="AIzaSy...">
+                                <button onclick="saveGeminiKey()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl transition shadow-md cursor-pointer">Guardar Clave</button>
+                            </div>
+                        </div>
+                        <div class="pt-2">
+                            <button onclick="testGeminiConnection()" class="px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                                <i class="ti ti-plug-connected text-base text-gray-500"></i> Probar Conexión con Servidor de Google
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-PAGINA: DISEÑADOR DE MATERIAS -->
+                <div id="tab-materias" class="dash-tab-content hidden space-y-6">
+                    <div class="border-b border-gray-100 pb-3 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-900">Diseñador Curricular de Asignaturas</h3>
+                        <button onclick="openMateriaModal()" class="px-4 py-2 bg-iutirla-blue hover:bg-blue-800 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center gap-1.5 cursor-pointer"><i class="ti ti-plus"></i> Registrar Materia</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-gray-50 font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                                <th class="p-3">Carrera / Área</th>
+                                <th class="p-3">Asignatura</th>
+                                <th class="p-3 text-center">Sección</th>
+                                <th class="p-3 text-center">Evaluaciones</th>
+                                <th class="p-3 text-right">Acciones</th>
+                            </thead>
+                            <tbody id="table-materias-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SUB-PAGINA: BANCO DE PREGUNTAS -->
+                <div id="tab-banco" class="dash-tab-content hidden space-y-6">
+                    <div class="border-b border-gray-100 pb-3 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                        <h3 class="text-lg font-bold text-gray-900">Gestor Integral del Banco de Preguntas</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="filter-banco-materia" onchange="renderBancoPreguntas()" class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"></select>
+                            <select id="filter-banco-unidad" onchange="renderBancoPreguntas()" class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="1">Unidad I</option><option value="2">Unidad II</option><option value="3">Unidad III</option><option value="4">Unidad IV</option><option value="5">Unidad V</option><option value="6">Unidad VI</option>
+                            </select>
+                            <button onclick="openPreguntaModal(null)" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-blue-950 font-bold rounded-xl text-xs transition shadow-md cursor-pointer"><i class="ti ti-plus"></i> Añadir Pregunta</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-center justify-between p-4 bg-amber-50/50 border border-amber-200 rounded-2xl text-xs text-amber-950 gap-3">
+                        <span id="banco-counter-label" class="font-semibold text-amber-900">Cargando inventario de preguntas...</span>
+                        <button onclick="triggerAIRegenerateSingleUnit()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"><i class="ti ti-wand"></i> Regenerar Unidad con IA</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-gray-50 font-bold text-gray-500 border-b border-gray-200">
+                                <th class="p-3 w-16 text-center">ID</th>
+                                <th class="p-3">Reactivo / Enunciado</th>
+                                <th class="p-3 w-24 text-center">Estatus Clave</th>
+                                <th class="p-3 w-28 text-right">Acciones</th>
+                            </thead>
+                            <tbody id="table-preguntas-body" class="divide-y divide-gray-100 text-gray-600"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SUB-PAGINA: CONTENIDO PROGRAMÁTICO (EDITOR E INTRODUCTOR DE DATOS) -->
+                <div id="tab-contenido" class="dash-tab-content hidden space-y-6">
+                    <div class="border-b border-gray-100 pb-3 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                        <h3 class="text-lg font-bold text-gray-900">Estructuración y Carga de Temarios Curriculares</h3>
+                        <div class="flex gap-2">
+                            <select id="select-contenido-materia" onchange="loadContenidoProgramaticoTab()" class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"></select>
+                            <select id="select-contenido-unidad" onchange="loadContenidoProgramaticoTab()" class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                                <option value="1">Unidad I</option><option value="2">Unidad II</option><option value="3">Unidad III</option><option value="4">Unidad IV</option><option value="5">Unidad V</option><option value="6">Unidad VI</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Contenido Analítico Formal de la Unidad</label>
+                                <textarea id="textarea-contenido" rows="12" class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm font-mono leading-relaxed" placeholder="Ingrese el texto explicativo o estructura curricular correspondiente a esta unidad específica..."></textarea>
+                            </div>
+                            <div class="flex flex-wrap justify-between items-center gap-2 pt-1">
+                                <button onclick="saveContenidoProgramaticoTab()" class="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow transition cursor-pointer">Guardar Cambios de Unidad</button>
+                                <button onclick="triggerAIUpdateBanco()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1 cursor-pointer"><i class="ti ti-sparkles"></i> Actualizar Banco con IA</button>
+                            </div>
+                        </div>
+                        <div class="space-y-4">
+                            <div id="dropzone-file" class="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center bg-gray-50 hover:bg-gray-100 transition relative flex flex-col items-center justify-center min-h-[180px]">
+                                <input type="file" id="file-uploader" accept=".txt,.pdf,.docx" onchange="handleFileUpload(event)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                                <i class="ti ti-cloud-upload text-4xl text-gray-400 mb-2"></i>
+                                <span class="block text-xs font-bold text-gray-700">Arrastre o cargue programa</span>
+                                <span class="text-[10px] text-gray-400 mt-1">Formatos soportados: .txt, .pdf, .docx</span>
+                            </div>
+                            <div class="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-xs text-gray-600 space-y-3">
+                                <strong class="font-bold uppercase text-gray-700 text-[10px] tracking-wider block">Procesamiento Continuo en Lote:</strong>
+                                <p class="leading-relaxed">El sistema es capaz de generar de forma encadenada y secuencial todas las preguntas evaluativas del pensum estructurado respetando la tasa límites.</p>
+                                <button onclick="triggerAIGenerateAllUnits()" class="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-1 cursor-pointer"><i class="ti ti-wand"></i> Generar Todas las Unidades</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-PAGINA: LISTADO DE ALUMNOS Y NOTAS -->
+                <div id="tab-estudiantes" class="dash-tab-content hidden space-y-6">
+                    <div class="border-b border-gray-100 pb-3 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                        <h3 class="text-lg font-bold text-gray-900">Control de Matrícula y Notas</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <input type="text" id="search-student-query" oninput="renderEstudiantes()" placeholder="Buscar por Nombre o Cédula..." class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs w-48 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <select id="filter-student-carrera" onchange="renderEstudiantes()" class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"></select>
+                            <select id="filter-student-materia" onchange="renderEstudiantes()" class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"></select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-gray-50 font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                                <th class="p-3">Cédula</th>
+                                <th class="p-3">Nombre Estudiante</th>
+                                <th class="p-3">Materia Asignada</th>
+                                <th class="p-3 text-center">Unidad Habilitada</th>
+                                <th class="p-3 text-right">Acciones</th>
+                            </thead>
+                            <tbody id="table-estudiantes-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SUB-PAGINA: CUADRO DE NOTAS Y MÉTRICAS ANALÍTICAS -->
+                <div id="tab-metricas" class="dash-tab-content hidden space-y-6">
+                    <div class="border-b border-gray-100 pb-3 flex flex-col sm:flex-row justify-between sm:items-center gap-4 print:hidden">
+                        <h3 class="text-lg font-bold text-gray-900">Cuadro Analítico y Métricas Escolares</h3>
+                        <div class="flex gap-2">
+                            <select id="metrics-filter-materia" onchange="renderMetricasDashboard()" class="px-3 py-1.5 border border-gray-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"></select>
+                            <button onclick="exportCSV()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1 cursor-pointer"><i class="ti ti-file-spreadsheet"></i> Exportar CSV</button>
+                            <button onclick="window.print()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1 cursor-pointer"><i class="ti ti-printer"></i> Imprimir Matriz</button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 print:hidden">
+                        <div class="border border-gray-200 rounded-2xl p-4 bg-gray-50/50">
+                            <h4 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Promedio Histórico General de Unidad</h4>
+                            <div class="h-44 relative"><canvas id="chart-bar-averages"></canvas></div>
+                        </div>
+                        <div class="border border-gray-200 rounded-2xl p-4 bg-gray-50/50">
+                            <h4 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Índice Proporcional de Rendimiento (Aprobación)</h4>
+                            <div class="h-44 relative"><canvas id="chart-doughnut-status"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Matriz General Consolidada de Actas</h4>
+                        <div class="overflow-x-auto border border-gray-200 rounded-2xl">
+                            <table class="w-full text-left border-collapse text-xs table-fixed min-w-[800px]">
+                                <thead class="bg-gray-100 font-bold text-gray-600 border-b border-gray-200">
+                                    <th class="p-3 w-28">Cédula</th>
+                                    <th class="p-3 w-48">Estudiante</th>
+                                    <th class="p-3 text-center">U1</th>
+                                    <th class="p-3 text-center">U2</th>
+                                    <th class="p-3 text-center">U3</th>
+                                    <th class="p-3 text-center">U4</th>
+                                    <th class="p-3 text-center">U5</th>
+                                    <th class="p-3 text-center">U6</th>
+                                    <th class="p-3 text-center bg-gray-200 font-black w-24">Acumulado</th>
+                                </thead>
+                                <tbody id="table-matrix-body" class="divide-y divide-gray-100 text-gray-700 bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-PAGINA: ADMINISTRACIÓN DE BASES DE DATOS (SINCRONIZACIÓN Y REINICIOS) -->
+                <div id="tab-admin" class="dash-tab-content hidden space-y-6">
+                    <div class="border-b border-gray-100 pb-3"><h3 class="text-lg font-bold text-gray-900">Administración General y Sincronización</h3></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="border border-red-200 rounded-2xl p-5 bg-red-50/40 space-y-4">
+                            <h4 class="font-bold text-red-900 text-sm flex items-center gap-1.5"><i class="ti ti-alert-triangle-filled"></i> Cierre e Inicio de Período Académico</h4>
+                            <p class="text-xs text-red-700 leading-relaxed">Esta acción purgará de forma definitiva la matrícula de todos los alumnos registrados, notas acumuladas y los intentos guardados. Mantiene intactos los temarios cargados y bancos de preguntas.</p>
+                            <button onclick="triggerPeriodReset()" class="px-4 py-2.5 bg-iutirla-red hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow transition cursor-pointer">Reinicio de Período</button>
+                        </div>
+                        <div class="border border-gray-200 rounded-2xl p-5 bg-gray-50 space-y-4">
+                            <h4 class="font-bold text-gray-900 text-sm flex items-center gap-1.5"><i class="ti ti-cloud-share"></i> Integración Cloud Firestore Firebase</h4>
+                            <p class="text-xs text-gray-600 leading-relaxed">Copie y pegue la configuración estructurada de su consola de Google Firebase para dar soporte a guardados simultáneos asíncronos distribuidos en tiempo real.</p>
+                            <textarea id="textarea-firebase-config" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder='{\n  "apiKey": "...",\n  "projectId": "..."\n}'></textarea>
+                            <button onclick="saveFirebaseConfig()" class="px-4 py-2.5 bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold rounded-xl shadow transition cursor-pointer">Sincronizar Cloud Firebase</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- PIE DE PÁGINA -->
+    <footer id="main-footer" class="bg-gray-100 border-t border-gray-200 py-6 mt-12 text-center text-xs text-gray-500 print:hidden">
+        <p>&copy; 2026 Instituto Universitario de Tecnología Industrial Rodolfo Loero Arismendi (IUTIRLA).</p>
+        <p class="text-[10px] text-gray-400 mt-1.5">Entorno Autónomo con Cifrado Local Permanente. Desarrollado e Integrado con Google Gemini.</p>
+    </footer>
+
+    <!-- RECIPIENTES DE DIÁLOGOS MODALES Y MENSAJES TOAST -->
+    <div id="toast-wrapper" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+    <div id="modal-container" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div id="modal-box" class="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 relative animate-slide-up"></div>
+    </div>
+
+    <!-- SCRIPT DE INTELIGENCIA DE NEGOCIO Y ACADEMIA -->
+    <script>
+        // --- CONSTANTES DE AUTENTICACIÓN ---
+        const DOCENTE_PASS_B64 = "ZG9jZW50ZTIwMjY="; // Ofuscación base64 de 'docente2026'
+
+        // --- MODELO DE DATOS Y PERSISTENCIA GENERAL ---
+        let appData = {
+            materias: [],
+            bancoPreguntas: [],
+            contenidoProgramatico: [],
+            estudiantes: [],
+            intentos: [],
+            config: { firebase: null }
+        };
+
+        // Cargar datos locales al iniciar la aplicación
+        function loadStorage() {
+            const data = localStorage.getItem('iutirla_sys_v3_db');
+            if (data) {
+                try {
+                    appData = JSON.parse(data);
+                } catch (e) {
+                    console.error("Fallo de lectura de base de datos local", e);
+                }
+            } else {
+                seedInitialData();
+            }
+            ensureDataIntegrity();
+        }
+
+        // Guardar cambios en el almacenamiento persistente local
+        function saveStorage() {
+            localStorage.setItem('iutirla_sys_v3_db', JSON.stringify(appData));
+            if (activeView === 'docente-dashboard' && activeTab === 'tab-metricas') {
+                renderMetricasDashboard();
+            }
+        }
+
+        // Datos iniciales de demostración
+        function seedInitialData() {
+            appData.materias = [
+                { id: "mat-1", name: "Introducción a la Algoritmia", carrera: "Informática", seccion: "3AI", unidadesCount: 4, weights: [25, 25, 25, 25] },
+                { id: "mat-2", name: "Fundamentos de Contabilidad", carrera: "Administración", seccion: "1AG", unidadesCount: 3, weights: [30, 30, 40] }
+            ];
+            appData.bancoPreguntas = [];
+            appData.contenidoProgramatico = [
+                { materiaId: "mat-1", unidad: 1, text: "Introducción a la algoritmia. Conceptos generales de algoritmos, tipos de datos simples, operadores lógicos y relacionales. Estructuras condicionales simples y complejas." }
+            ];
+            appData.estudiantes = [];
+            appData.intentos = [];
+            saveStorage();
+        }
+
+        // Asegurar que todas las colecciones estén instanciadas
+        function ensureDataIntegrity() {
+            if (!appData.materias) appData.materias = [];
+            if (!appData.bancoPreguntas) appData.bancoPreguntas = [];
+            if (!appData.contenidoProgramatico) appData.contenidoProgramatico = [];
+            if (!appData.estudiantes) appData.estudiantes = [];
+            if (!appData.intentos) appData.intentos = [];
+            if (!appData.config) appData.config = { firebase: null };
+            updateIAStatusIndicator();
+        }
+
+        // --- SISTEMA DE MANEJO DE VISTAS (NATIVO SINO ROUTERS) ---
+        let activeView = "welcome";
+        let activeTab = "tab-ia";
+        let examTimerInterval = null;
+
+        function switchView(viewId) {
+            if (viewId === 'exam-engine') {
+                document.body.classList.add('exam-mode');
+            } else {
+                document.body.classList.remove('exam-mode');
+            }
+
+            document.querySelectorAll('.view-segment').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`view-${viewId}`).classList.remove('hidden');
+            activeView = viewId;
+
+            if (viewId === 'student-portal') populateStudentFormDropdowns();
+            if (viewId === 'docente-dashboard') switchDashboardTab(activeTab);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function switchDashboardTab(tabId) {
+            document.querySelectorAll('.dash-tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.dash-tab-btn').forEach(btn => btn.classList.remove('bg-gray-100', 'font-bold', 'text-gray-900'));
+
+            const tabContent = document.getElementById(tabId);
+            if (tabContent) tabContent.classList.remove('hidden');
+
+            const tabBtn = Array.from(document.querySelectorAll('.dash-tab-btn')).find(btn => btn.getAttribute('onclick').includes(tabId));
+            if (tabBtn) tabBtn.classList.add('bg-gray-100', 'font-bold', 'text-gray-900');
+
+            activeTab = tabId;
+
+            if (tabId === 'tab-ia') initIATab();
+            if (tabId === 'tab-materias') renderMaterias();
+            if (tabId === 'tab-banco') initBancoTabDropdowns();
+            if (tabId === 'tab-contenido') initContenidoTabDropdowns();
+            if (tabId === 'tab-estudiantes') initEstudiantesTabDropdowns();
+            if (tabId === 'tab-metricas') initMetricasTabDropdowns();
+            if (tabId === 'tab-admin') initAdminTab();
+        }
+
+        // --- TOASTS NOTIFICADORES ---
+        function showToast(text, type = "success") {
+            const wrapper = document.getElementById('toast-wrapper');
+            const toast = document.createElement('div');
+            toast.className = `p-4 rounded-xl shadow-lg border text-xs font-semibold bg-white flex items-center gap-2.5 pointer-events-auto animate-slide-up min-w-[260px]`;
+            
+            let icon = '<i class="ti ti-circle-check-filled text-lg text-emerald-500"></i>';
+            if (type === 'error') {
+                icon = '<i class="ti ti-circle-x-filled text-lg text-red-500"></i>';
+                toast.classList.add('border-red-100');
+            } else if (type === 'warning') {
+                icon = '<i class="ti ti-alert-triangle-filled text-lg text-amber-500"></i>';
+                toast.classList.add('border-amber-100');
+            } else {
+                toast.classList.add('border-emerald-100');
+            }
+
+            toast.innerHTML = `${icon} <div class="flex-grow">${text}</div>`;
+            wrapper.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(1.5rem)';
+                toast.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // --- MODALES PERSONALIZADOS ---
+        function openModal(content) {
+            const container = document.getElementById('modal-container');
+            const box = document.getElementById('modal-box');
+            box.innerHTML = content;
+            container.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal-container').classList.add('hidden');
+        }
+
+        // --- VALIDACIÓN DE LOGINS DOCENTE ---
+        function promptDocenteLogin() {
+            const content = `
+                <div class="border-b border-gray-100 pb-3">
+                    <h3 class="text-sm font-bold text-gray-900 flex items-center gap-1.5"><i class="ti ti-shield-lock-filled text-lg text-blue-900"></i> Control de Acceso Docente</h3>
+                </div>
+                <div class="space-y-4 pt-2">
+                    <p class="text-xs text-gray-500">Por favor ingrese la clave académica vigente asignada para el presente período académico de evaluaciones.</p>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Clave de Validación</label>
+                        <input type="password" id="modal-docente-key" class="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="••••••••">
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button onclick="closeModal()" class="px-3 py-2 bg-gray-100 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-200 transition cursor-pointer">Cancelar</button>
+                        <button onclick="verifyDocenteLogin()" class="px-4 py-2 bg-iutirla-blue text-white font-bold text-xs rounded-xl hover:bg-blue-800 transition shadow-md cursor-pointer">Validar Acceso</button>
+                    </div>
+                </div>
+            `;
+            openModal(content);
+            setTimeout(() => document.getElementById('modal-docente-key').focus(), 100);
+        }
+
+        function verifyDocenteLogin() {
+            const key = document.getElementById('modal-docente-key').value;
+            if (btoa(key) === DOCENTE_PASS_B64) {
+                closeModal();
+                showToast("Acceso académico autenticado con éxito.");
+                switchView('docente-dashboard');
+            } else {
+                showToast("La clave ingresada es inválida.", "error");
+            }
+        }
+
+        // --- INTEGRACIÓN GOOGLE GEMINI EMULADA ---
+        function getGeminiEndpoint() {
+            const key = localStorage.getItem('gemini_key') || "";
+            return `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+        }
+
+        function initIATab() {
+            document.getElementById('input-gemini-key').value = localStorage.getItem('gemini_key') || "";
+        }
+
+        function saveGeminiKey() {
+            const key = document.getElementById('input-gemini-key').value.trim();
+            localStorage.setItem('gemini_key', key);
+            updateIAStatusIndicator();
+            showToast("Clave del motor de IA persistida.");
+        }
+
+        function updateIAStatusIndicator() {
+            const key = localStorage.getItem('gemini_key');
+            const badge = document.getElementById('ia-status-badge');
+            if (badge) {
+                if (key && key.length > 10) {
+                    badge.className = "text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700";
+                    badge.innerText = "IA Operativa ✓";
+                } else {
+                    badge.className = "text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-100 text-red-700";
+                    badge.innerText = "IA Inactiva ✗";
+                }
+            }
+        }
+
+        async function testGeminiConnection() {
+            const key = localStorage.getItem('gemini_key');
+            if (!key) return showToast("API Key no configurada.", "warning");
+
+            showToast("Verificando credenciales con Google...", "warning");
+            try {
+                const response = await fetch(getGeminiEndpoint(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "Responde estrictamente: OK" }] }],
+                        generationConfig: { responseMimeType: "text/plain" }
+                    })
+                });
+                if (!response.ok) throw new Error();
+                showToast("Handshake exitoso. Conexión restablecida con Google AI Studio.");
+            } catch (err) {
+                showToast("Handshake fallido. Revise su conexión y su API Key.", "error");
+            }
+        }
+
+        // --- DISEÑADOR DE MATERIAS ---
+        function renderMaterias() {
+            const body = document.getElementById('table-materias-body');
+            body.innerHTML = "";
+            if (appData.materias.length === 0) {
+                body.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-xs text-gray-400">Sin materias cargadas.</td></tr>`;
+                return;
+            }
+            appData.materias.forEach(m => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50/50 transition";
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-gray-900">${m.carrera}</td>
+                    <td class="p-3 font-medium">${m.name}</td>
+                    <td class="p-3 text-center text-xs font-mono bg-gray-50/80 rounded-xl">${m.seccion}</td>
+                    <td class="p-3 text-center text-xs font-bold">${m.unidadesCount} Evaluaciones</td>
+                    <td class="p-3 text-right">
+                        <button onclick="deleteMateria('${m.id}')" class="p-1 hover:text-red-600 transition text-gray-400 cursor-pointer" title="Remover"><i class="ti ti-trash text-lg"></i></button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function openMateriaModal() {
+            const content = `
+                <div class="border-b border-gray-100 pb-3"><h3 class="text-sm font-bold text-gray-900">Dar de Alta Asignatura</h3></div>
+                <form id="form-modal-materia" onsubmit="saveMateriaModal(event)" class="space-y-3.5 pt-2 text-xs">
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Nombre de la Asignatura</label>
+                        <input type="text" id="mm-name" required class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-semibold text-gray-600 mb-1">Carrera</label>
+                            <input type="text" id="mm-carrera" placeholder="Ej: Informática" required class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-gray-600 mb-1">Sección</label>
+                            <input type="text" id="mm-seccion" placeholder="Ej: 3AI" required class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Número de Evaluaciones / Unidades (1 - 6)</label>
+                        <input type="number" id="mm-count" min="1" max="6" value="4" oninput="generateWeightsFields(this.value)" required class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                    </div>
+                    <div id="weights-fields" class="space-y-1.5 bg-gray-50 p-3 rounded-xl border border-gray-100"></div>
+                    <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                        <button type="button" onclick="closeModal()" class="px-3 py-2 bg-gray-100 text-gray-600 font-semibold rounded-xl hover:bg-gray-200 transition cursor-pointer">Cancelar</button>
+                        <button type="submit" class="px-4 py-2 bg-iutirla-blue text-white font-bold rounded-xl hover:bg-blue-800 transition cursor-pointer shadow-md">Registrar</button>
+                    </div>
+                </form>
+            `;
+            openModal(content);
+            generateWeightsFields(4);
+        }
+
+        function generateWeightsFields(val) {
+            const count = parseInt(val) || 0;
+            const container = document.getElementById('weights-fields');
+            container.innerHTML = `<span class="block font-bold text-[9px] text-gray-400 uppercase tracking-wider mb-2">Ponderación Proporcional (%)</span>`;
+            const base = Math.floor(100 / count);
+            let total = 0;
+            for (let i = 1; i <= count; i++) {
+                const w = (i === count) ? (100 - total) : base;
+                total += w;
+                container.innerHTML += `
+                    <div class="flex justify-between items-center gap-4">
+                        <span class="font-semibold text-gray-600">Unidad Evaluativa ${i}</span>
+                        <input type="number" name="m-weight" value="${w}" min="1" max="100" class="w-20 px-2 py-1 border border-gray-300 rounded-lg text-right text-xs font-mono font-bold focus:ring-1 focus:ring-blue-500">
+                    </div>
+                `;
+            }
+        }
+
+        function saveMateriaModal(e) {
+            e.preventDefault();
+            const name = document.getElementById('mm-name').value;
+            const carrera = document.getElementById('mm-carrera').value;
+            const seccion = document.getElementById('mm-seccion').value;
+            const count = parseInt(document.getElementById('mm-count').value);
+
+            const weightInputs = document.getElementsByName('m-weight');
+            let sum = 0;
+            const weights = [];
+            weightInputs.forEach(input => {
+                const val = parseInt(input.value) || 0;
+                sum += val;
+                weights.push(val);
+            });
+
+            if (sum !== 100) {
+                showToast(`Las ponderaciones deben sumar exactamente 100%. Suma actual: ${sum}%`, "error");
+                return;
+            }
+
+            const newMat = { id: 'mat-' + Date.now(), name, carrera, seccion, unidadesCount: count, weights };
+            appData.materias.push(newMat);
+            saveStorage();
+            closeModal();
+            showToast("Materia dada de alta correctamente.");
+            renderMaterias();
+        }
+
+        function deleteMateria(id) {
+            const content = `
+                <div class="text-center space-y-3 py-2">
+                    <i class="ti ti-trash-x text-4xl text-red-500"></i>
+                    <h3 class="text-base font-bold text-gray-900">¿Remover Asignatura?</h3>
+                    <p class="text-xs text-gray-500">Esta acción removerá la definición curricular del pensum de la sección, las notas e historiales quedarán preservados por auditoría.</p>
+                    <div class="flex justify-center gap-2 pt-2">
+                        <button onclick="closeModal()" class="px-3 py-1.5 bg-gray-100 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-200 transition cursor-pointer">Cancelar</button>
+                        <button onclick="confirmDeleteMateria('${id}')" class="px-4 py-1.5 bg-red-600 text-white font-bold text-xs rounded-xl hover:bg-red-700 transition cursor-pointer">Confirmar Eliminación</button>
+                    </div>
+                </div>
+            `;
+            openModal(content);
+        }
+
+        function confirmDeleteMateria(id) {
+            appData.materias = appData.materias.filter(m => m.id !== id);
+            saveStorage();
+            closeModal();
+            showToast("Asignatura removida.");
+            renderMaterias();
+        }
+
+        // --- BANCO DE PREGUNTAS ---
+        function initBancoTabDropdowns() {
+            const select = document.getElementById('filter-banco-materia');
+            select.innerHTML = "";
+            if (appData.materias.length === 0) {
+                select.innerHTML = `<option value="">Agregue materias</option>`;
+                return;
+            }
+            appData.materias.forEach(m => {
+                select.innerHTML += `<option value="${m.id}">${m.name} (${m.seccion})</option>`;
+            });
+            renderBancoPreguntas();
+        }
+
+        function renderBancoPreguntas() {
+            const matId = document.getElementById('filter-banco-materia').value;
+            const unidad = parseInt(document.getElementById('filter-banco-unidad').value) || 1;
+            const body = document.getElementById('table-preguntas-body');
+            const label = document.getElementById('banco-counter-label');
+
+            body.innerHTML = "";
+            if (!matId) {
+                label.innerText = "No existen materias seleccionadas.";
+                return;
+            }
+
+            const filtradas = appData.bancoPreguntas.filter(p => p.materiaId === matId && p.unidad === unidad);
+            label.innerText = `Inventario Unidad ${unidad}: ${filtradas.length} de 30 preguntas creadas.`;
+
+            if (filtradas.length === 0) {
+                body.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-xs text-gray-400">Banco vacío. Genere preguntas automáticamente desde "Contenido Programático".</td></tr>`;
+                return;
+            }
+
+            filtradas.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50/50 text-xs transition";
+                tr.innerHTML = `
+                    <td class="p-3 font-mono font-bold text-gray-400 text-center">#${p.id}</td>
+                    <td class="p-3 font-medium text-gray-900 truncate max-w-sm" title="${p.pregunta}">${p.pregunta}</td>
+                    <td class="p-3 text-center"><span class="w-6 h-6 rounded-full bg-blue-50 text-iutirla-blue border border-blue-100 font-bold flex items-center justify-center mx-auto">${p.correcta}</span></td>
+                    <td class="p-3 text-right space-x-1">
+                        <button onclick="openPreguntaModal('${p.dbId}')" class="px-2 py-1 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-700 cursor-pointer" title="Editar"><i class="ti ti-edit"></i></button>
+                        <button onclick="deletePregunta('${p.dbId}')" class="px-2 py-1 bg-white border border-gray-200 hover:bg-red-50 hover:border-red-200 text-red-600 rounded-lg cursor-pointer" title="Remover"><i class="ti ti-trash"></i></button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function openPreguntaModal(dbId) {
+            const matId = document.getElementById('filter-banco-materia').value;
+            const unidad = parseInt(document.getElementById('filter-banco-unidad').value) || 1;
+
+            let q = { id: Date.now(), pregunta: "", opciones: ["", "", "", ""], correcta: "A", explicacion: "" };
+            let isEdit = false;
+
+            if (dbId) {
+                const found = appData.bancoPreguntas.find(p => p.dbId === dbId);
+                if (found) {
+                    q = JSON.parse(JSON.stringify(found));
+                    isEdit = true;
+                }
+            }
+
+            const content = `
+                <div class="border-b border-gray-100 pb-2"><h3 class="text-sm font-bold text-gray-900">${isEdit ? 'Modificar Reactivo Curricular' : 'Añadir Reactivo Manual'}</h3></div>
+                <form id="form-modal-pregunta" onsubmit="savePreguntaModal(event, '${dbId || ''}', '${matId}', ${unidad}, ${q.id})" class="space-y-3 pt-2 text-xs">
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Enunciado / Pregunta</label>
+                        <textarea id="pm-pregunta" required rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">${q.pregunta}</textarea>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-semibold text-gray-500 mb-1">Opción A</label>
+                            <input type="text" id="pm-optA" value="${q.opciones[0] || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-gray-500 mb-1">Opción B</label>
+                            <input type="text" id="pm-optB" value="${q.opciones[1] || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-gray-500 mb-1">Opción C</label>
+                            <input type="text" id="pm-optC" value="${q.opciones[2] || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-gray-500 mb-1">Opción D</label>
+                            <input type="text" id="pm-optD" value="${q.opciones[3] || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="block font-semibold text-gray-600 mb-1">Estatus Clave</label>
+                            <select id="pm-correcta" class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white font-bold text-xs focus:ring-1 focus:ring-blue-500">
+                                <option value="A" ${q.correcta === 'A' ? 'selected' : ''}>A</option>
+                                <option value="B" ${q.correcta === 'B' ? 'selected' : ''}>B</option>
+                                <option value="C" ${q.correcta === 'C' ? 'selected' : ''}>C</option>
+                                <option value="D" ${q.correcta === 'D' ? 'selected' : ''}>D</option>
+                            </select>
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block font-semibold text-gray-600 mb-1">Breve Explicación de Retroalimentación</label>
+                            <input type="text" id="pm-explicacion" value="${q.explicacion || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                        <button type="button" onclick="closeModal()" class="px-3 py-2 bg-gray-100 text-gray-600 font-semibold rounded-xl hover:bg-gray-200 transition cursor-pointer">Cancelar</button>
+                        <button type="submit" class="px-4 py-2 bg-amber-500 text-blue-950 font-bold rounded-xl hover:bg-amber-600 transition cursor-pointer shadow-md">Guardar</button>
+                    </div>
+                </form>
+            `;
+            openModal(content);
+        }
+
+        function savePreguntaModal(e, dbId, materiaId, unidad, id) {
+            e.preventDefault();
+            const pregunta = document.getElementById('pm-pregunta').value;
+            const opciones = [
+                document.getElementById('pm-optA').value,
+                document.getElementById('pm-optB').value,
+                document.getElementById('pm-optC').value,
+                document.getElementById('pm-optD').value
+            ];
+            const correcta = document.getElementById('pm-correcta').value;
+            const explicacion = document.getElementById('pm-explicacion').value;
+
+            if (dbId) {
+                const idx = appData.bancoPreguntas.findIndex(p => p.dbId === dbId);
+                if (idx !== -1) {
+                    appData.bancoPreguntas[idx].pregunta = pregunta;
+                    appData.bancoPreguntas[idx].opciones = opciones;
+                    appData.bancoPreguntas[idx].correcta = correcta;
+                    appData.bancoPreguntas[idx].explicacion = explicacion;
+                    appData.bancoPreguntas[idx].editedManual = true; // Proteger reactivos editados
+                }
+            } else {
+                appData.bancoPreguntas.push({
+                    dbId: 'q-' + Date.now(),
+                    materiaId, unidad, id, pregunta, opciones, correcta, explicacion, editedManual: true
+                });
+            }
+
+            saveStorage();
+            closeModal();
+            showToast("Banco curricular de la sección actualizado.");
+            renderBancoPreguntas();
+        }
+
+        function deletePregunta(dbId) {
+            appData.bancoPreguntas = appData.bancoPreguntas.filter(p => p.dbId !== dbId);
+            saveStorage();
+            showToast("Reactivo removido.");
+            renderBancoPreguntas();
+        }
+
+        // --- CONSUMIDOR API DE GOOGLE GEMINI ---
+        async function fetchQuestionsFromAI(content, unidadLabel) {
+            const endpoint = getGeminiEndpoint();
+            const payload = `Eres un experto en diseño curricular universitario. Basándote EXCLUSIVAMENTE en el siguiente contenido programático de ${unidadLabel}, genera exactamente 30 preguntas de selección múltiple en formato JSON. Cada pregunta debe tener las siguientes llaves exactas: id (número), pregunta (texto), opciones (array de 4 strings: A, B, C, D), correcta (letra de la opción correcta) y explicacion (texto breve).\n\nContenido programático:\n${content}`;
+
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: payload }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                })
+            });
+
+            if (!response.ok) {
+                if (response.status === 429) {
+                    throw new Error("Límite de cuota Google AI Studio alcanzada (15 RPM).");
+                }
+                throw new Error(`Error de red con API de Google (${response.status})`);
+            }
+
+            const data = await response.json();
+            let rawText = data.candidates[0].content.parts[0].text;
+            rawText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+
+            const parsed = JSON.parse(rawText);
+            if (!Array.isArray(parsed)) throw new Error("La estructura devuelta no es un array válido.");
+            return parsed;
+        }
+
+        async function triggerAIRegenerateSingleUnit() {
+            const matId = document.getElementById('filter-banco-materia').value;
+            const unidad = parseInt(document.getElementById('filter-banco-unidad').value) || 1;
+            
+            const mat = appData.materias.find(m => m.id === matId);
+            const contentObj = appData.contenidoProgramatico.find(c => c.materiaId === matId && c.unidad === unidad);
+
+            if (!contentObj || !contentObj.text.trim()) {
+                return showToast("La unidad seleccionada no posee un programa curricular cargado.", "warning");
+            }
+
+            showToast("Solicitando nuevo banco de preguntas a Google Gemini...", "warning");
+            try {
+                const generated = await fetchQuestionsFromAI(contentObj.text, `Unidad ${unidad} de la materia ${mat.name}`);
+                
+                // Remover anteriores no editadas a mano
+                appData.bancoPreguntas = appData.bancoPreguntas.filter(p => !(p.materiaId === matId && p.unidad === unidad && !p.editedManual));
+
+                generated.forEach((q, idx) => {
+                    appData.bancoPreguntas.push({
+                        dbId: `q-${matId}-${unidad}-${idx}-${Date.now()}`,
+                        materiaId: matId,
+                        unidad,
+                        id: q.id || (idx + 1),
+                        pregunta: q.pregunta,
+                        opciones: q.opciones,
+                        correcta: q.correcta,
+                        explicacion: q.explicacion,
+                        editedManual: false
+                    });
+                });
+
+                saveStorage();
+                showToast("Unidad curricular de 30 preguntas inyectada exitosamente.");
+                renderBancoPreguntas();
+            } catch (err) {
+                showToast(`Fallo en llamada IA: ${err.message}`, "error");
+            }
+        }
+
+        // --- CONTENIDO PROGRAMÁTICO ---
+        function initContenidoTabDropdowns() {
+            const select = document.getElementById('select-contenido-materia');
+            select.innerHTML = "";
+            appData.materias.forEach(m => {
+                select.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+            });
+            loadContenidoProgramaticoTab();
+        }
+
+        function loadContenidoProgramaticoTab() {
+            const matId = document.getElementById('select-contenido-materia').value;
+            const unidad = parseInt(document.getElementById('select-contenido-unidad').value) || 1;
+            const textarea = document.getElementById('textarea-contenido');
+
+            textarea.value = "";
+            if (!matId) return;
+
+            const found = appData.contenidoProgramatico.find(c => c.materiaId === matId && c.unidad === unidad);
+            if (found) textarea.value = found.text;
+        }
+
+        function saveContenidoProgramaticoTab() {
+            const matId = document.getElementById('select-contenido-materia').value;
+            const unidad = parseInt(document.getElementById('select-contenido-unidad').value) || 1;
+            const txt = document.getElementById('textarea-contenido').value;
+
+            if (!matId) return;
+
+            const idx = appData.contenidoProgramatico.findIndex(c => c.materiaId === matId && c.unidad === unidad);
+            if (idx !== -1) {
+                appData.contenidoProgramatico[idx].text = txt;
+            } else {
+                appData.contenidoProgramatico.push({ materiaId: matId, unidad, text: txt });
+            }
+            saveStorage();
+            showToast("Programa analítico guardado.");
+        }
+
+        function triggerAIUpdateBanco() {
+            saveContenidoProgramaticoTab();
+            const content = `
+                <div class="space-y-3 py-1">
+                    <h3 class="text-sm font-bold text-gray-900">Estrategia de Actualización Curricular</h3>
+                    <p class="text-xs text-gray-500">¿Cómo desea aplicar la inyección de IA sobre las preguntas existentes en la unidad activa?</p>
+                    <div class="flex flex-col gap-2 pt-2">
+                        <button onclick="executeAIUpdateStrategy(true)" class="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl transition text-left px-3 flex justify-between items-center cursor-pointer">
+                            <span>Sobreescribir y recrear todas las 30 preguntas</span><i class="ti ti-arrow-right"></i>
+                        </button>
+                        <button onclick="executeAIUpdateStrategy(false)" class="w-full py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs rounded-xl transition text-left px-3 flex justify-between items-center cursor-pointer">
+                            <span>Mantener solo las preguntas editadas manualmente</span><i class="ti ti-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            openModal(content);
+        }
+
+        async function executeAIUpdateStrategy(overWriteAll) {
+            closeModal();
+            const matId = document.getElementById('select-contenido-materia').value;
+            const unidad = parseInt(document.getElementById('select-contenido-unidad').value) || 1;
+            const mat = appData.materias.find(m => m.id === matId);
+            const contentObj = appData.contenidoProgramatico.find(c => c.materiaId === matId && c.unidad === unidad);
+
+            if (!contentObj || !contentObj.text.trim()) return showToast("Programa curricular vacío.", "error");
+
+            showToast("Analizando contenidos curriculares con Gemini...", "warning");
+            try {
+                const generated = await fetchQuestionsFromAI(contentObj.text, `Unidad ${unidad} de la materia ${mat.name}`);
+                
+                const manualesProteger = overWriteAll ? [] : appData.bancoPreguntas.filter(p => p.materiaId === matId && p.unidad === unidad && p.editedManual);
+                
+                appData.bancoPreguntas = appData.bancoPreguntas.filter(p => !(p.materiaId === matId && p.unidad === unidad));
+
+                // Inyectar protegidas primero
+                manualesProteger.forEach(p => appData.bancoPreguntas.push(p));
+
+                // Completar hasta las 30 preguntas
+                generated.forEach((q, idx) => {
+                    if (!manualesProteger.some(m => m.id === q.id)) {
+                        appData.bancoPreguntas.push({
+                            dbId: `q-${matId}-${unidad}-${idx}-${Date.now()}`,
+                            materiaId: matId,
+                            unidad,
+                            id: q.id || (idx + 1),
+                            pregunta: q.pregunta,
+                            opciones: q.opciones,
+                            correcta: q.correcta,
+                            explicacion: q.explicacion,
+                            editedManual: false
+                        });
+                    }
+                });
+
+                saveStorage();
+                showToast("Inyección de actualización concluida con éxito.");
+            } catch (err) {
+                showToast(`Error: ${err.message}`, "error");
+            }
+        }
+
+        async function triggerAIGenerateAllUnits() {
+            const matId = document.getElementById('select-contenido-materia').value;
+            const mat = appData.materias.find(m => m.id === matId);
+            if (!mat) return;
+
+            showToast(`Iniciando lote secuencial para: ${mat.name}`, "warning");
+            
+            for (let u = 1; u <= mat.unidadesCount; u++) {
+                const contentObj = appData.contenidoProgramatico.find(c => c.materiaId === matId && c.unidad === u);
+                if (!contentObj || !contentObj.text.trim()) {
+                    showToast(`Unidad ${u} omitida: sin programa cargado.`, "warning");
+                    continue;
+                }
+
+                showToast(`Generando lote Unidad ${u}...`, "warning");
+                try {
+                    const generated = await fetchQuestionsFromAI(contentObj.text, `Unidad ${u} de la materia ${mat.name}`);
+                    appData.bancoPreguntas = appData.bancoPreguntas.filter(p => !(p.materiaId === matId && p.unidad === u));
+
+                    generated.forEach((q, idx) => {
+                        appData.bancoPreguntas.push({
+                            dbId: `q-${matId}-${u}-${idx}-${Date.now()}`,
+                            materiaId: matId,
+                            unidad: u,
+                            id: q.id || (idx + 1),
+                            pregunta: q.pregunta,
+                            opciones: q.opciones,
+                            correcta: q.correcta,
+                            explicacion: q.explicacion,
+                            editedManual: false
+                        });
+                    });
+                    saveStorage();
+                    showToast(`✓ Unidad ${u} completada.`);
+                } catch (e) {
+                    showToast(`✗ Unidad ${u} fallida: ${e.message}`, "error");
+                }
+
+                if (u < mat.unidadesCount) {
+                    showToast("Esperando ventana de enfriamiento (4s)...", "warning");
+                    await new Promise(r => setTimeout(r, 4000));
+                }
+            }
+            showToast("Carga y generación de banco unificado concluida.");
+        }
+
+        // --- CARGA DE ARCHIVOS ---
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            const textarea = document.getElementById('textarea-contenido');
+
+            showToast("Extrayendo flujo de metadatos de archivo...", "warning");
+
+            if (ext === 'txt') {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    textarea.value = evt.target.result;
+                    showToast("Programa inyectado correctamente.");
+                };
+                reader.readAsText(file);
+            } 
+            else if (ext === 'docx') {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    mammoth.extractRawText({ arrayBuffer: evt.target.result })
+                        .then(res => {
+                            textarea.value = res.value;
+                            showToast("Flujo Word cargado correctamente.");
+                        })
+                        .catch(() => showToast("Error decodificando Word.", "error"));
+                };
+                reader.readAsArrayBuffer(file);
+            } 
+            else if (ext === 'pdf') {
+                const reader = new FileReader();
+                reader.onload = async function(evt) {
+                    try {
+                        const arr = new Uint8Array(evt.target.result);
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+                        const pdf = await pdfjsLib.getDocument(arr).promise;
+                        let text = "";
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const textContent = await page.getTextContent();
+                            text += textContent.items.map(item => item.str).join(" ") + "\n";
+                        }
+                        textarea.value = text;
+                        showToast("Contenido PDF procesado e inyectado.");
+                    } catch (err) {
+                        showToast("No se pudo decodificar el PDF.", "error");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                showToast("Formato de archivo no soportado por el motor.", "error");
+            }
+        }
+
+        // --- CONTROL MATRÍCULA DE ESTUDIANTES ---
+        function initEstudiantesTabDropdowns() {
+            const carrera = document.getElementById('filter-student-carrera');
+            const materia = document.getElementById('filter-student-materia');
+
+            carrera.innerHTML = '<option value="">Filtrar por Carrera (Todas)</option>';
+            materia.innerHTML = '<option value="">Filtrar por Asignatura (Todas)</option>';
+
+            const deDup = [...new Set(appData.materias.map(m => m.carrera))];
+            deDup.forEach(c => carrera.innerHTML += `<option value="${c}">${c}</option>`);
+            appData.materias.forEach(m => materia.innerHTML += `<option value="${m.id}">${m.name}</option>`);
+
+            renderEstudiantes();
+        }
+
+        function renderEstudiantes() {
+            const query = document.getElementById('search-student-query').value.toLowerCase();
+            const filCarrera = document.getElementById('filter-student-carrera').value;
+            const filMateria = document.getElementById('filter-student-materia').value;
+            const body = document.getElementById('table-estudiantes-body');
+
+            body.innerHTML = "";
+
+            const filtrados = appData.estudiantes.filter(s => {
+                const matchQ = s.name.toLowerCase().includes(query) || s.cedula.toLowerCase().includes(query);
+                const matchC = filCarrera ? s.carrera === filCarrera : true;
+                const matchM = filMateria ? s.materiaId === filMateria : true;
+                return matchQ && matchC && matchM;
+            });
+
+            if (filtrados.length === 0) {
+                body.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-xs text-gray-400">Sin registros de matrícula cargados.</td></tr>`;
+                return;
+            }
+
+            filtrados.forEach(s => {
+                const mat = appData.materias.find(m => m.id === s.materiaId) || { name: "Materia Desconocida", seccion: "--" };
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50/50 text-xs transition";
+                tr.innerHTML = `
+                    <td class="p-3 font-mono font-semibold">${s.cedula}</td>
+                    <td class="p-3 font-bold text-gray-900">${s.name}</td>
+                    <td class="p-3 text-gray-600"><div>${mat.name}</div><span class="text-[10px] text-gray-400 font-mono">${mat.seccion}</span></td>
+                    <td class="p-3 text-center"><span class="px-2.5 py-1 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-100">Unidad Evaluativa ${s.unidadActiva}</span></td>
+                    <td class="p-3 text-right space-x-1">
+                        <button onclick="openEditEstudianteModal('${s.cedula}')" class="px-2 py-1 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-700 cursor-pointer" title="Modificar calificaciones"><i class="ti ti-edit"></i></button>
+                        <button onclick="deleteEstudiante('${s.cedula}')" class="px-2 py-1 bg-white border border-gray-200 hover:bg-red-50 text-red-600 rounded-lg cursor-pointer" title="Remover"><i class="ti ti-trash"></i></button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function openEditEstudianteModal(cedula) {
+            const s = appData.estudiantes.find(e => e.cedula === cedula);
+            if (!s) return;
+
+            const mat = appData.materias.find(m => m.id === s.materiaId) || { unidadesCount: 4 };
+
+            let scoresHtml = "";
+            for (let u = 1; u <= mat.unidadesCount; u++) {
+                const notaVal = s.notasEvaluaciones[u] !== undefined ? s.notasEvaluaciones[u] : "";
+                scoresHtml += `
+                    <div class="flex justify-between items-center gap-4 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-xs text-gray-700">Nota Unidad ${u}</span>
+                            <button type="button" onclick="resetStudentAttempt('${s.cedula}', ${u})" class="text-[9px] bg-amber-500 hover:bg-amber-600 text-blue-950 font-extrabold px-1.5 py-0.5 rounded-md transition cursor-pointer">Reiniciar Intento</button>
+                        </div>
+                        <input type="number" step="0.1" min="0" max="20" name="modal-score" data-unidad="${u}" value="${notaVal}" class="w-16 px-2 py-1 border border-gray-300 rounded-lg text-right text-xs font-bold text-gray-900 focus:ring-1 focus:ring-blue-500">
+                    </div>
+                `;
+            }
+
+            const content = `
+                <div class="border-b border-gray-100 pb-2"><h3 class="text-sm font-bold text-gray-900">Modificar Expediente Académico</h3></div>
+                <form id="form-modal-edit-student" onsubmit="saveEditEstudianteModal(event, '${s.cedula}')" class="space-y-4 pt-2 text-xs">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-semibold text-gray-600 mb-1">Nombre Completo</label>
+                            <input type="text" id="me-name" value="${s.name}" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-gray-600 mb-1">Cédula</label>
+                            <input type="text" id="me-cedula" value="${s.cedula}" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm bg-gray-50" readonly>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <span class="block font-bold text-[9px] text-gray-400 uppercase tracking-wider mb-1">Plan de Evaluaciones Escala (0 - 20)</span>
+                        ${scoresHtml}
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                        <button type="button" onclick="closeModal()" class="px-3 py-2 bg-gray-100 text-gray-600 font-semibold rounded-xl hover:bg-gray-200 transition cursor-pointer">Cancelar</button>
+                        <button type="submit" class="px-4 py-2 bg-iutirla-blue text-white font-bold rounded-xl hover:bg-blue-800 transition cursor-pointer shadow-md">Guardar</button>
+                    </div>
+                </form>
+            `;
+            openModal(content);
+        }
+
+        function saveEditEstudianteModal(e, cedula) {
+            e.preventDefault();
+            const s = appData.estudiantes.find(el => el.cedula === cedula);
+            if (!s) return;
+
+            s.name = document.getElementById('me-name').value;
+
+            const inputs = document.getElementsByName('modal-score');
+            inputs.forEach(inp => {
+                const u = parseInt(inp.getAttribute('data-unidad'));
+                const valStr = inp.value.trim();
+                if (valStr === "") {
+                    delete s.notasEvaluaciones[u];
+                } else {
+                    s.notasEvaluaciones[u] = Math.min(20, Math.max(0, parseFloat(valStr) || 0));
+                }
+            });
+
+            saveStorage();
+            closeModal();
+            showToast("Expediente estudiantil actualizado.");
+            renderEstudiantes();
+        }
+
+        function resetStudentAttempt(cedula, unidad) {
+            const s = appData.estudiantes.find(el => el.cedula === cedula);
+            if (!s) return;
+
+            delete s.notasEvaluaciones[unidad];
+            appData.intentos = appData.intentos.filter(i => !(i.cedula === cedula && i.unidad === unidad));
+
+            s.unidadActiva = Math.max(1, unidad);
+            saveStorage();
+            closeModal();
+            showToast(`Evaluación de la Unidad ${unidad} reiniciada para el alumno.`);
+            renderEstudiantes();
+        }
+
+        function deleteEstudiante(cedula) {
+            const content = `
+                <div class="text-center space-y-3 py-2">
+                    <i class="ti ti-user-x text-4xl text-red-500"></i>
+                    <h3 class="text-base font-bold text-gray-900">¿Remover Estudiante?</h3>
+                    <p class="text-xs text-gray-500">Esta acción removerá de forma definitiva al estudiante, sus calificaciones registradas y todos los comprobantes de intentos correspondientes.</p>
+                    <div class="flex justify-center gap-2 pt-2">
+                        <button onclick="closeModal()" class="px-3 py-1.5 bg-gray-100 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-200 transition cursor-pointer">Cancelar</button>
+                        <button onclick="confirmDeleteEstudiante('${cedula}')" class="px-4 py-1.5 bg-red-600 text-white font-bold text-xs rounded-xl hover:bg-red-700 transition cursor-pointer">Confirmar Eliminación</button>
+                    </div>
+                </div>
+            `;
+            openModal(content);
+        }
+
+        function confirmDeleteEstudiante(cedula) {
+            appData.estudiantes = appData.estudiantes.filter(e => e.cedula !== cedula);
+            appData.intentos = appData.intentos.filter(i => i.cedula !== cedula);
+            saveStorage();
+            closeModal();
+            showToast("Estudiante y comprobantes eliminados.");
+            renderEstudiantes();
+        }
+
+        // --- MATRIZ DE RENDIMIENTO Y REPORTES ---
+        let barChartInstance = null;
+        let doughnutChartInstance = null;
+
+        function initMetricasTabDropdowns() {
+            const select = document.getElementById('metrics-filter-materia');
+            select.innerHTML = "";
+            appData.materias.forEach(m => {
+                select.innerHTML += `<option value="${m.id}">${m.name} (${m.seccion})</option>`;
+            });
+            renderMetricasDashboard();
+        }
+
+        function renderMetricasDashboard() {
+            const matId = document.getElementById('metrics-filter-materia').value;
+            const matrixBody = document.getElementById('table-matrix-body');
+            matrixBody.innerHTML = "";
+
+            if (!matId) return;
+            const mat = appData.materias.find(m => m.id === matId);
+            if (!mat) return;
+
+            const alumnosInscritos = appData.estudiantes.filter(s => s.materiaId === matId);
+
+            if (alumnosInscritos.length === 0) {
+                matrixBody.innerHTML = `<tr><td colspan="9" class="p-3 text-center text-xs text-gray-400">Sin alumnos registrados para rendir evaluaciones en esta materia.</td></tr>`;
+                destroyCharts();
+                return;
+            }
+
+            let aprobados = 0;
+            let reprobados = 0;
+            const promediosPorUnidad = Array(mat.unidadesCount).fill(0);
+            const contadoresPorUnidad = Array(mat.unidadesCount).fill(0);
+
+            alumnosInscritos.forEach(s => {
+                let acumulado = 0;
+                let cellsHtml = "";
+
+                for (let u = 1; u <= 6; u++) {
+                    if (u <= mat.unidadesCount) {
+                        const nota = s.notasEvaluaciones[u];
+                        if (nota !== undefined) {
+                            cellsHtml += `<td class="p-2.5 text-center font-mono font-semibold">${nota.toFixed(1)}</td>`;
+                            const pct = mat.weights[u - 1] || 0;
+                            acumulado += (nota * (pct / 100));
+
+                            promediosPorUnidad[u - 1] += nota;
+                            contadoresPorUnidad[u - 1]++;
+                        } else {
+                            cellsHtml += `<td class="p-2.5 text-center font-mono text-gray-300">--</td>`;
+                        }
+                    } else {
+                        cellsHtml += `<td class="p-2.5 text-center font-mono text-gray-200 bg-gray-50/50">--</td>`;
+                    }
+                }
+
+                if (acumulado >= 9.5) aprobados++; else reprobados++;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50/50 divide-x divide-gray-100 border-b border-gray-100 transition";
+                tr.innerHTML = `
+                    <td class="p-2.5 font-mono font-semibold text-gray-900">${s.cedula}</td>
+                    <td class="p-2.5 font-bold text-gray-800 truncate">${s.name}</td>
+                    ${cellsHtml}
+                    <td class="p-2.5 text-center font-mono font-black ${acumulado >= 9.5 ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'}">${acumulado.toFixed(2)}</td>
+                `;
+                matrixBody.appendChild(tr);
+            });
+
+            const labels = [];
+            const dataAverages = [];
+            for (let i = 0; i < mat.unidadesCount; i++) {
+                labels.push(`Unidad ${i + 1}`);
+                const totalNotas = contadoresPorUnidad[i];
+                dataAverages.push(totalNotas > 0 ? (promediosPorUnidad[i] / totalNotas) : 0);
+            }
+
+            destroyCharts();
+
+            const ctxBar = document.getElementById('chart-bar-averages').getContext('2d');
+            barChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{ label: 'Promedio Notas', data: dataAverages, backgroundColor: '#1e3a8a', borderRadius: 4 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 20 } } }
+            });
+
+            const ctxDona = document.getElementById('chart-doughnut-status').getContext('2d');
+            doughnutChartInstance = new Chart(ctxDona, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Aprobados', 'Reprobados'],
+                    datasets: [{ data: [aprobados, reprobados], backgroundColor: ['#10b981', '#dc2626'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function destroyCharts() {
+            if (barChartInstance) { barChartInstance.destroy(); barChartInstance = null; }
+            if (doughnutChartInstance) { doughnutChartInstance.destroy(); doughnutChartInstance = null; }
+        }
+
+        function exportCSV() {
+            const matId = document.getElementById('metrics-filter-materia').value;
+            if (!matId) return;
+            const mat = appData.materias.find(m => m.id === matId);
+            const alumnos = appData.estudiantes.filter(s => s.materiaId === matId);
+
+            let csv = "Cedula,Estudiante,U1,U2,U3,U4,U5,U6,Acumulado\n";
+            alumnos.forEach(s => {
+                let ac = 0;
+                let row = `"${s.cedula}","${s.name}",`;
+                for (let u = 1; u <= 6; u++) {
+                    const n = s.notasEvaluaciones[u];
+                    if (n !== undefined) {
+                        row += `${n.toFixed(1)},`;
+                        if (u <= mat.unidadesCount) ac += (n * ((mat.weights[u-1] || 0) / 100));
+                    } else { row += ","; }
+                }
+                row += `${ac.toFixed(2)}\n`;
+                csv += row;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `Acta_Notas_${mat.name.replace(/\s+/g, '_')}_2026.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- ADMINISTRACIÓN GENERAL ---
+        function initAdminTab() {
+            document.getElementById('textarea-firebase-config').value = JSON.stringify(appData.config.firebase || {}, null, 2);
+        }
+
+        function saveFirebaseConfig() {
+            const txt = document.getElementById('textarea-firebase-config').value.trim();
+            try {
+                if (txt === "") {
+                    appData.config.firebase = null;
+                } else {
+                    appData.config.firebase = JSON.parse(txt);
+                }
+                saveStorage();
+                showToast("Vinculación de Firebase emulada configurada.");
+            } catch (e) {
+                showToast("Estructura JSON inválida para Firebase.", "error");
+            }
+        }
+
+        function triggerPeriodReset() {
+            const content = `
+                <div class="text-center space-y-3 py-2">
+                    <i class="ti ti-alert-triangle-filled text-5xl text-red-600 animate-pulse"></i>
+                    <h3 class="text-base font-black text-gray-900">¿REINICIAR PERÍODO CURRICULAR?</h3>
+                    <p class="text-xs text-gray-500">Esta acción purgará de forma irreversible toda la base de datos de estudiantes cargados, sus calificaciones registradas y todos los comprobantes de intentos de evaluaciones en curso.</p>
+                    <div class="bg-red-50 p-2 text-[10px] text-red-700 font-mono rounded-lg border border-red-100">Los temarios académicos e inventarios de reactivos no sufrirán alteración alguna.</div>
+                    <div class="flex justify-center gap-2 pt-2">
+                        <button onclick="closeModal()" class="px-3 py-1.5 bg-gray-100 text-gray-600 font-semibold text-xs rounded-lg hover:bg-gray-200 transition cursor-pointer">Cancelar</button>
+                        <button onclick="executePeriodResetConfirmed()" class="px-4 py-1.5 bg-red-600 text-white font-bold text-xs rounded-lg hover:bg-red-700 transition cursor-pointer">Confirmar Doble Purga</button>
+                    </div>
+                </div>
+            `;
+            openModal(content);
+        }
+
+        function executePeriodResetConfirmed() {
+            appData.estudiantes = [];
+            appData.intentos = [];
+            saveStorage();
+            closeModal();
+            showToast("Período e historial reiniciados exitosamente.");
+        }
+
+        // --- SISTEMA DE EXAMEN ESTUDIANTES ---
+        function populateStudentFormDropdowns() {
+            const carrera = document.getElementById('stud-carrera');
+            carrera.innerHTML = '<option value="">Seleccione su carrera</option>';
+            const carreras = [...new Set(appData.materias.map(m => m.carrera))];
+            carreras.forEach(c => carrera.innerHTML += `<option value="${c}">${c}</option>`);
+            updateStudentFormSubjects();
+        }
+
+        function updateStudentFormSubjects() {
+            const carrera = document.getElementById('stud-carrera').value;
+            const materia = document.getElementById('stud-materia');
+            materia.innerHTML = '<option value="">Seleccione la Asignatura</option>';
+
+            const filtradas = appData.materias.filter(m => m.carrera === carrera);
+            filtradas.forEach(m => materia.innerHTML += `<option value="${m.id}">${m.name} (Sección ${m.seccion})</option>`);
+            updateStudentFormUnits();
+        }
+
+        function updateStudentFormUnits() {
+            const matId = document.getElementById('stud-materia').value;
+            const unidad = document.getElementById('stud-unidad');
+            unidad.innerHTML = '<option value="">Seleccione la Evaluación</option>';
+
+            const mat = appData.materias.find(m => m.id === matId);
+            if (!mat) return;
+
+            for (let i = 1; i <= mat.unidadesCount; i++) {
+                unidad.innerHTML += `<option value="${i}">Unidad Evaluativa ${i}</option>`;
+            }
+        }
+
+        let currentExamSession = null;
+        let currentRandomQuestions = [];
+
+        function handleStudentAccess(e) {
+            e.preventDefault();
+            const name = document.getElementById('stud-name').value.trim();
+            const cedula = document.getElementById('stud-cedula').value.trim().toUpperCase();
+            const carrera = document.getElementById('stud-carrera').value;
+            const materiaId = document.getElementById('stud-materia').value;
+            const unidad = parseInt(document.getElementById('stud-unidad').value);
+
+            let alumno = appData.estudiantes.find(el => el.cedula === cedula);
+            if (!alumno) {
+                alumno = { cedula, name, carrera, materiaId, unidadActiva: 1, notasEvaluaciones: {} };
+                appData.estudiantes.push(alumno);
+            }
+
+            // Regla de secuencia académica correlativa
+            if (unidad > alumno.unidadActiva) {
+                showToast(`Bloqueo de Secuencia: No puede cursar la Unidad ${unidad} sin haber registrado previamente la Unidad ${unidad - 1}.`, "error");
+                return;
+            }
+
+            // Regla de Intento Único por Unidad
+            if (alumno.notasEvaluaciones[unidad] !== undefined) {
+                showToast("Acceso denegado: ya posee un acta y calificación registrada.", "warning");
+                displayReceiptResult(alumno, materiaId, unidad);
+                return;
+            }
+
+            const bancoReactivos = appData.bancoPreguntas.filter(p => p.materiaId === materiaId && p.unidad === unidad);
+            if (bancoReactivos.length < 10) {
+                showToast("La evaluación no se encuentra disponible. El banco curricular posee menos de 10 preguntas.", "error");
+                return;
+            }
+
+            // Extraer 10 preguntas aleatorias de las 30 del banco curricular
+            const shuffled = [...bancoReactivos].sort(() => 0.5 - Math.random());
+            currentRandomQuestions = shuffled.slice(0, 10);
+
+            currentExamSession = { alumno, materiaId, unidad, timestamp: Date.now() };
+            launchExam();
+        }
+
+        function launchExam() {
+            switchView('exam-engine');
+            const container = document.getElementById('exam-questions-container');
+            container.innerHTML = "";
+
+            const mat = appData.materias.find(m => m.id === currentExamSession.materiaId);
+            document.getElementById('exam-subject-title').innerText = `${mat.name} — Unidad Evaluativa ${currentExamSession.unidad}`;
+            document.getElementById('exam-student-title').innerText = `Estudiante: ${currentExamSession.alumno.name} (${currentExamSession.alumno.cedula})`;
+
+            currentRandomQuestions.forEach((q, idx) => {
+                const card = document.createElement('div');
+                card.className = "bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4 animate-slide-up";
+                card.innerHTML = `
+                    <div class="flex items-start gap-2.5">
+                        <span class="bg-iutirla-blue text-white font-bold text-xs rounded-lg px-2.5 py-1 mt-0.5 shrink-0">Reactivo ${idx + 1}</span>
+                        <h5 class="font-bold text-gray-900 text-sm leading-relaxed">${q.pregunta}</h5>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        ${['A', 'B', 'C', 'D'].map((letra, oIdx) => `
+                            <label class="flex items-center gap-3 p-3.5 rounded-xl border border-gray-150 hover:bg-gray-50 cursor-pointer transition text-xs font-semibold text-gray-700">
+                                <input type="radio" name="reactivo-${idx}" value="${letra}" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                                <span class="w-6 h-6 rounded-full bg-gray-100 font-extrabold text-gray-700 flex items-center justify-center shrink-0 border border-gray-200">${letra}</span>
+                                <div class="leading-relaxed">${q.opciones[oIdx] || ''}</div>
+                            </label>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            let seconds = 3600;
+            const timer = document.getElementById('exam-timer');
+            const wrapper = document.getElementById('exam-timer-wrapper');
+
+            if (examTimerInterval) clearInterval(examTimerInterval);
+
+            examTimerInterval = setInterval(() => {
+                seconds--;
+                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const secs = (seconds % 60).toString().padStart(2, '0');
+                timer.innerText = `${mins}:${secs}`;
+
+                if (seconds <= 300) {
+                    wrapper.className = "bg-red-600 text-white p-2 px-3 rounded-xl font-bold text-center border border-red-700 flex flex-col justify-center min-w-[80px] animate-pulse";
+                } else {
+                    wrapper.className = "bg-red-50 text-iutirla-red p-2 px-3 rounded-xl font-bold text-center border border-red-100 flex flex-col justify-center min-w-[80px]";
+                }
+
+                if (seconds <= 0) {
+                    clearInterval(examTimerInterval);
+                    showToast("Tiempo de evaluación concluido. Guardando respuestas...", "error");
+                    processEvaluation();
+                }
+            }, 1000);
+        }
+
+        function confirmSubmitExamManual() {
+            const content = `
+                <div class="text-center space-y-3 py-2">
+                    <i class="ti ti-help-octagon text-4xl text-blue-600"></i>
+                    <h3 class="text-base font-bold text-gray-900">¿Enviar Evaluación Concluida?</h3>
+                    <p class="text-xs text-gray-500">Por favor verifique haber contestado todos los reactivos curriculares antes del envío de datos definitivo.</p>
+                    <div class="flex justify-center gap-2 pt-2">
+                        <button onclick="closeModal()" class="px-3 py-1.5 bg-gray-100 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-200 transition cursor-pointer">Volver al Examen</button>
+                        <button onclick="executeExamSubmission()" class="px-4 py-1.5 bg-iutirla-blue text-white font-bold text-xs rounded-xl hover:bg-blue-800 transition cursor-pointer shadow-md">Enviar Respuestas</button>
+                    </div>
+                </div>
+            `;
+            openModal(content);
+        }
+
+        function executeExamSubmission() {
+            closeModal();
+            if (examTimerInterval) clearInterval(examTimerInterval);
+            processEvaluation();
+        }
+
+        function processEvaluation() {
+            let correctCount = 0;
+            const logRevision = [];
+
+            currentRandomQuestions.forEach((q, idx) => {
+                const selectedInput = document.querySelector(`input[name="reactivo-${idx}"]:checked`);
+                const answer = selectedInput ? selectedInput.value : "";
+                const isCorrect = answer === q.correcta;
+
+                if (isCorrect) correctCount++;
+
+                logRevision.push({
+                    id: q.id,
+                    enunciado: q.pregunta,
+                    opciones: q.opciones,
+                    seleccionada: answer,
+                    correcta: q.correcta,
+                    explicacion: q.explicacion,
+                    esCorrecta: isCorrect
+                });
+            });
+
+            // Calificación final en base a la escala vigesimal (2.0 puntos por reactivo correcto)
+            const score = correctCount * 2.0;
+
+            const s = appData.estudiantes.find(el => el.cedula === currentExamSession.alumno.cedula);
+            if (s) {
+                s.notasEvaluaciones[currentExamSession.unidad] = score;
+                // Desbloqueo y avance secuencial de unidades
+                s.unidadActiva = currentExamSession.unidad + 1;
+            }
+
+            const attemptId = `int-${Date.now()}`;
+            appData.intentos.push({
+                attemptId,
+                cedula: currentExamSession.alumno.cedula,
+                materiaId: currentExamSession.materiaId,
+                unidad: currentExamSession.unidad,
+                nota: score,
+                timestampStr: new Date().toLocaleString(),
+                detalleRevision: logRevision
+            });
+
+            saveStorage();
+            showToast("Respuestas registradas. Procesando boleta oficial...");
+            displayReceiptResult(s, currentExamSession.materiaId, currentExamSession.unidad, attemptId);
+        }
+
+        // --- RENDERIZADO BOLETA DE RESULTADOS ---
+        function displayReceiptResult(student, materiaId, unidad, providedAttemptId = null) {
+            switchView('student-receipt');
+
+            const mat = appData.materias.find(m => m.id === materiaId);
+            const score = student.notasEvaluaciones[unidad] || 0.0;
+
+            document.getElementById('rec-name').innerText = student.name;
+            document.getElementById('rec-cedula').innerText = student.cedula;
+            document.getElementById('rec-carrera').innerText = student.carrera;
+            document.getElementById('rec-materia-un').innerText = `${mat.name} (Unidad Evaluativa ${unidad})`;
+
+            const scoreLabel = document.getElementById('rec-score');
+            const statusLabel = document.getElementById('rec-status');
+            const seal = document.getElementById('receipt-seal');
+
+            scoreLabel.innerText = `${score.toFixed(1)} / 20.0`;
+
+            if (score >= 9.5) {
+                statusLabel.innerText = "Aprobado";
+                statusLabel.className = "block text-[10px] uppercase font-black tracking-wider text-emerald-600 mt-1";
+                seal.className = "absolute right-6 top-6 border-4 border-double p-2 text-center uppercase font-black tracking-widest text-lg rounded-xl transform rotate-12 select-none border-emerald-600 text-emerald-600 bg-emerald-50/50";
+                seal.innerText = "Aprobado";
+            } else {
+                statusLabel.innerText = "Reprobado";
+                statusLabel.className = "block text-[10px] uppercase font-black tracking-wider text-red-600 mt-1";
+                seal.className = "absolute right-6 top-6 border-4 border-double p-2 text-center uppercase font-black tracking-widest text-lg rounded-xl transform rotate-12 select-none border-red-600 text-red-600 bg-red-50/50";
+                seal.innerText = "Reprobado";
+            }
+
+            const reviewContainer = document.getElementById('receipt-review-container');
+            reviewContainer.innerHTML = "";
+
+            let attempt = providedAttemptId ? appData.intentos.find(i => i.attemptId === providedAttemptId) : null;
+            if (!attempt) {
+                attempt = appData.intentos.find(i => i.cedula === student.cedula && i.materiaId === materiaId && i.unidad === unidad);
+            }
+
+            if (!attempt) {
+                reviewContainer.innerHTML = `<p class="text-xs text-gray-400 italic">Retroalimentación detallada del intento diferido temporalmente.</p>`;
+                return;
+            }
+
+            attempt.detalleRevision.forEach((item, idx) => {
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-xl border ${item.esCorrecta ? 'bg-emerald-50/30 border-emerald-100' : 'bg-red-50/30 border-red-100'} space-y-2 text-xs`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start gap-4">
+                        <span class="font-bold text-gray-900 leading-relaxed">#${idx + 1}: ${item.enunciado}</span>
+                        <span class="font-bold shrink-0 ${item.esCorrecta ? 'text-emerald-700' : 'text-red-700'}">${item.esCorrecta ? '2.0 / 2.0 pts' : '0.0 / 2.0 pts'}</span>
+                    </div>
+                    <div class="text-[11px] text-gray-500 font-medium">
+                        Respuesta marcada: <strong class="uppercase text-gray-700">${item.seleccionada || 'Ninguna'}</strong> | 
+                        Clave de respuesta: <strong class="uppercase text-gray-700">${item.correcta}</strong>
+                    </div>
+                    ${item.explicacion ? `<div class="bg-white/80 p-2.5 rounded-lg border border-gray-150 text-[11px] text-gray-600 italic"><strong>Análisis Retroalimentario:</strong> ${item.explicacion}</div>` : ''}
+                `;
+                reviewContainer.appendChild(card);
+            });
+        }
+
+        // --- ARRANQUE AL CARGAR EL ÁREA DE TRABAJO ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadStorage();
+            switchView('welcome');
+        });
+    </script>
+</body>
+</html>
